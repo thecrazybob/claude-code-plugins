@@ -1,0 +1,9 @@
+{
+  "name": "laravel-valet-worktree",
+  "description": "Git worktrees with Laravel Valet, databases, and Warp terminal config",
+  "version": "1.0.0",
+  "author": {
+    "name": "TheCrazyBob"
+  },
+  "keywords": ["laravel", "valet", "worktree", "git", "warp"]
+}

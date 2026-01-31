@@ -1,0 +1,27 @@
+{
+  "name": "thecrazybob-plugins",
+  "owner": {
+    "name": "TheCrazyBob",
+    "url": "https://github.com/thecrazybob"
+  },
+  "metadata": {
+    "description": "Laravel development plugins for Claude Code",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "laravel-valet-worktree",
+      "source": "./plugins/laravel-valet-worktree",
+      "description": "Git worktrees with Laravel Valet, databases, and Warp terminal config",
+      "version": "1.0.0",
+      "keywords": ["laravel", "valet", "worktree", "git"]
+    },
+    {
+      "name": "forge-cli",
+      "source": "./plugins/forge-cli",
+      "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
+      "version": "1.0.0",
+      "keywords": ["laravel", "forge", "production", "ssh"]
+    }
+  ]
+}

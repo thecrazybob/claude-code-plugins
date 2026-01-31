@@ -1,0 +1,9 @@
+{
+  "name": "forge-cli",
+  "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
+  "version": "1.0.0",
+  "author": {
+    "name": "TheCrazyBob"
+  },
+  "keywords": ["laravel", "forge", "production", "ssh", "debugging"]
+}
