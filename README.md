@@ -100,4 +100,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Author
 
-[TheCrazyBob](https://github.com/thecrazybob)
+[Mohammed Sohail](https://github.com/thecrazybob)

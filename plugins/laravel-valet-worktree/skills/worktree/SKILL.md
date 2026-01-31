@@ -360,7 +360,7 @@ options:
 |----------|-------------|---------|
 | `$BRANCH` | Original branch name | `feature/user-auth` |
 | `$SANITIZED_BRANCH` | Filesystem-safe version | `feature-user-auth` |
-| `$PROJECT` | Project name | `scoutjobs` |
+| `$PROJECT` | Project name | `myproject` |
 | `$BASE_BRANCH` | Main branch | `main` or `master` |
 
 ## Troubleshooting

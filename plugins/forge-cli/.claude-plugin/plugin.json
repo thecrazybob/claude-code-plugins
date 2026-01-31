@@ -3,7 +3,7 @@
   "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
   "version": "1.0.0",
   "author": {
-    "name": "TheCrazyBob"
+    "name": "Mohammed Sohail"
   },
   "keywords": ["laravel", "forge", "production", "ssh", "debugging"]
 }

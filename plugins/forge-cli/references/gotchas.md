@@ -41,10 +41,10 @@ ssh forge@<server-ip> "cd /home/forge/<site>/current && php artisan --version"
 
 ```bash
 # Wrong - this is the parent directory
-/home/forge/scoutjobs.ai/
+/home/forge/example.com/
 
 # Correct - this is the active release
-/home/forge/scoutjobs.ai/current/
+/home/forge/example.com/current/
 ```
 
 ## 5. Tinker Output Requires Echo

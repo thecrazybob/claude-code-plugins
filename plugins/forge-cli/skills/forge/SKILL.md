@@ -155,8 +155,8 @@ ssh forge@<ip> "cd /home/forge/<site>/current && php artisan config:clear"
 **Example workflow:**
 
 ```bash
-# Pull scoutjobs.ai .env (creates .env.forge.<id> in cwd)
-forge env:pull scoutjobs.ai
+# Pull example.com .env (creates .env.forge.<id> in cwd)
+forge env:pull example.com
 
 # Rename for editing
 mv .env.forge.* .env
@@ -165,11 +165,11 @@ mv .env.forge.* .env
 code .env  # or vim .env
 
 # Push back
-forge env:push scoutjobs.ai
+forge env:push example.com
 
 # Clean up local file and clear cache
 rm .env
-ssh forge@91.98.234.156 "cd /home/forge/scoutjobs.ai/current && php artisan config:clear"
+ssh forge@<ip> "cd /home/forge/example.com/current && php artisan config:clear"
 ```
 
 **Why this is safer:**
@@ -272,16 +272,3 @@ ssh forge@<ip> "top -bn1 | head -20"  # CPU/processes
 7. **Wrong path** - Always use `/current` symlink, not the site root
 8. **Never edit .env via SSH** - Don't use `sed`, `echo >>`, or direct edits on production `.env`. Use `forge env:pull` → edit locally → `forge env:push` instead (safer, creates backup, avoids shell escaping issues)
 
-## ScoutJobs-Specific
-
-```bash
-# Server: scoutjobs.ai production
-# Site: scoutjobs.ai
-
-# Quick checks
-forge site:logs scoutjobs.ai
-ssh forge@<ip> "cd /home/forge/scoutjobs.ai/current && php artisan horizon:status"
-
-# Check job listings
-ssh forge@<ip> "cd /home/forge/scoutjobs.ai/current && php artisan tinker --execute='echo App\\Models\\JobListing::count();'"
-```

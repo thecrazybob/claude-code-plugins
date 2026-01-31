@@ -3,7 +3,7 @@
   "description": "Git worktrees with Laravel Valet, databases, and Warp terminal config",
   "version": "1.0.0",
   "author": {
-    "name": "TheCrazyBob"
+    "name": "Mohammed Sohail"
   },
   "keywords": ["laravel", "valet", "worktree", "git", "warp"]
 }
