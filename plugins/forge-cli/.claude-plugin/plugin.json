@@ -1,7 +1,7 @@
 {
   "name": "forge-cli",
   "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "author": {
     "name": "Mohammed Sohail"
   },

@@ -1,7 +1,7 @@
 ---
 name: forge-cli
 description: Debug and manage Laravel applications in production via Laravel Forge CLI and direct SSH. Activates when the user mentions production logs, debug production, forge, check production, run on server, production database, deploy, SSH to production, server logs, remote artisan, production error, or tinker production.
-version: 1.1.0
+version: 1.2.0
 ---
 
 # Laravel Forge CLI
@@ -132,7 +132,14 @@ forge deploy:reset <site>        # Resets deployment script
 
 **Always use `env:pull` and `env:push` for environment changes** - never edit `.env` directly via SSH with `sed` or `echo` (error-prone, no backup).
 
-> **⚠️ CRITICAL: Always use the scratchpad directory for env:pull/env:push operations!**
+> **CRITICAL: Do NOT rename or copy the `.env.forge.<id>` file!**
+>
+> Forge CLI internally tracks the original `.env.forge.<site-id>` filename created by `env:pull`. Renaming it (e.g., `mv .env.forge.* .env`) or copying it (`cp .env.forge.* .env`) breaks this tracking and causes `env:push` to fail with:
+> `"The environment variables for that site have not been downloaded."`
+>
+> **Edit the `.env.forge.<site-id>` file directly, then push.**
+
+> **CRITICAL: Always use the scratchpad directory for env:pull/env:push operations!**
 >
 > The `forge env:pull` command creates files in the current working directory. If run from a project root, this can **overwrite the local `.env` file** and cause data loss.
 >
@@ -145,23 +152,24 @@ cd <scratchpad-directory>
 # 2. Pull current .env to scratchpad
 #    Creates .env.forge.<site-id> in current working directory
 forge env:pull <site>
-# Output: Environment Variables Written To [.env.forge.2922612]
+# Output: Environment Variables Written To [.env.forge.3023104]
 
-# 3. Copy to .env for editing (forge env:push reads from .env)
-cp .env.forge.* .env
-
-# 4. Edit the .env file with your changes
+# 3. Edit the .env.forge.<site-id> file DIRECTLY with your changes
+#    DO NOT rename or copy it — Forge tracks the original filename internally
 #    - Add new variables
 #    - Update existing values
 #    - Remove obsolete variables
 
-# 5. Push the updated .env back to production (DESTRUCTIVE)
-forge env:push <site>
+# 4. Push back to production (DESTRUCTIVE)
+#    Forge will prompt: "Would You Like Update The Site Environment File
+#    With The Contents Of The File [.env.forge.<id>] (yes/no)"
+#    Pipe "yes" to confirm non-interactively
+echo "yes" | forge env:push <site>
 
-# 6. Clean up scratchpad files
-rm -f .env .env.forge.*
+# 5. Clean up scratchpad files
+rm -f .env.forge.*
 
-# 7. Clear config cache on the server (if needed)
+# 6. Clear config cache on the server
 ssh forge@<ip> "cd /home/forge/<site> && php artisan config:clear"
 ```
 
@@ -173,21 +181,30 @@ cd <scratchpad-directory>
 
 # Pull example.com .env to scratchpad
 forge env:pull example.com
+# Output: Environment Variables Written To [.env.forge.3023104]
 
-# Copy for editing
-cp .env.forge.* .env
+# Edit the pulled file directly (DO NOT rename)
+# Use the Edit tool to add/modify variables in .env.forge.3023104
 
-# Edit locally (safer than SSH, easy to review)
-# Add/modify variables as needed
-
-# Push back
+# Push back (pipe "yes" for non-interactive confirmation)
 echo "yes" | forge env:push example.com
 
 # Clean up scratchpad
-rm -f .env .env.forge.*
+rm -f .env.forge.*
 
 # Clear config cache on server
 ssh forge@<ip> "cd /home/forge/example.com && php artisan config:clear"
+```
+
+**Common mistake — DO NOT do this:**
+```bash
+# WRONG: Renaming breaks Forge's internal file tracking
+mv .env.forge.3023104 .env
+forge env:push example.com  # FAILS: "environment variables not downloaded"
+
+# WRONG: Copying also breaks it
+cp .env.forge.3023104 .env
+forge env:push example.com  # FAILS: same error
 ```
 
 **Why use the scratchpad:**
@@ -338,4 +355,5 @@ ssh forge@<ip> "top -bn1 | head -20"  # CPU/processes
 7. **Wrong path** - Check deployment mode first; use `/current` symlink only for zero-downtime deployments
 8. **Never edit .env via SSH** - Don't use `sed`, `echo >>`, or direct edits on production `.env`. Use `forge env:pull` → edit locally → `forge env:push` instead (safer, creates backup, avoids shell escaping issues)
 9. **CRITICAL: env:pull/env:push in wrong directory** - ALWAYS `cd` to the scratchpad directory before running `forge env:pull` or `forge env:push`. Running from a project root will overwrite the local `.env` file!
+10. **CRITICAL: Never rename `.env.forge.*` files** - Forge CLI tracks the original `.env.forge.<site-id>` filename internally. Renaming it (e.g., `mv .env.forge.* .env`) breaks tracking and `env:push` will fail. Edit the `.env.forge.<site-id>` file directly.
 
