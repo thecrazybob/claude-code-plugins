@@ -6,7 +6,7 @@ allowed-tools: Bash, Read, Write, Edit, AskUserQuestion, Glob
 
 # /worktree Command
 
-Create a new git worktree for a Laravel project served by Laravel Valet.
+Create a new git worktree for a Laravel project served by Laravel Valet. Uses generated `scripts/setup.sh` for environment setup instead of inline steps.
 
 ## Arguments
 
@@ -57,68 +57,40 @@ BASE_BRANCH=$(git config init.defaultBranch 2>/dev/null || echo "main")
 git show-ref --verify --quiet refs/heads/$BASE_BRANCH || BASE_BRANCH="master"
 ```
 
-### Step 4: Create Worktree
+### Step 4: Check for Scripts
+
+```bash
+if [ ! -f scripts/setup.sh ]; then
+    echo "scripts/setup.sh not found. Generating scripts first..."
+fi
+```
+
+If `scripts/setup.sh` is missing, inform the user and trigger `/scripts` generation before proceeding. Do not continue without the scripts.
+
+### Step 5: Create Worktree
 
 ```bash
 git worktree add .worktrees/$SANITIZED_BRANCH -b $BRANCH $BASE_BRANCH
 ```
 
-### Step 5: Link with Valet (HTTP only)
+### Step 6: Copy Scripts
+
+```bash
+cp -r scripts/ .worktrees/$SANITIZED_BRANCH/scripts/
+```
+
+### Step 7: Run setup.sh
+
+This single command replaces the old inline steps (Valet link, .env config, DB creation, dependencies, migrations, etc.):
 
 ```bash
 cd .worktrees/$SANITIZED_BRANCH
-valet link $PROJECT-$SANITIZED_BRANCH
+CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH \
+CONDUCTOR_ROOT_PATH=$(cd ../.. && pwd) \
+bash scripts/setup.sh
 ```
 
-**IMPORTANT:** Do NOT run `valet secure`. HTTP avoids Vite mixed content issues.
-
-### Step 6: Configure Environment
-
-```bash
-cp ../../.env .env
-```
-
-Update these values in `.env`:
-
-| Key | Value |
-|-----|-------|
-| `APP_URL` | `http://$PROJECT-$SANITIZED_BRANCH.test` |
-| `SESSION_DOMAIN` | `$PROJECT-$SANITIZED_BRANCH.test` |
-| `SESSION_SECURE_COOKIE` | `false` |
-| `DB_DATABASE` | `${PROJECT}_${SANITIZED_BRANCH}` (use underscores for MySQL) |
-
-**For SANCTUM_STATEFUL_DOMAINS**, append the worktree domain if it exists.
-
-### Step 7: Create Database
-
-```bash
-DB_NAME=$(echo "${PROJECT}_${SANITIZED_BRANCH}" | tr '-' '_')
-mysql -u root -e "CREATE DATABASE IF NOT EXISTS $DB_NAME;"
-```
-
-### Step 8: Install Dependencies
-
-```bash
-composer install
-npm install
-```
-
-### Step 9: Clear Caches
-
-```bash
-php artisan config:clear
-php artisan cache:clear
-php artisan route:clear
-php artisan view:clear
-```
-
-### Step 10: Create Storage Symlink
-
-```bash
-php artisan storage:link --force
-```
-
-### Step 11: Fix Vite Configuration (if needed)
+### Step 8: Fix Vite Configuration (if needed)
 
 Check if `vite.config.js` or `vite.config.ts` has CORS settings. If missing, add:
 
@@ -129,13 +101,11 @@ server: {
 }
 ```
 
-### Step 12: Run Migrations
+**Only modify if these settings are missing.**
 
-```bash
-php artisan migrate:fresh --seed
-```
+### Step 9: Setup Warp Launch Configuration
 
-### Step 13: Setup Warp Launch Configuration
+Skip if `~/.warp/` doesn't exist.
 
 ```bash
 mkdir -p ~/.warp/launch_configurations
@@ -147,7 +117,7 @@ sed -e "s|{{WORKTREE_PATH}}|$WORKTREE_PATH|g" \
     > ~/.warp/launch_configurations/laravel-worktree.yaml
 ```
 
-### Step 14: Display Summary
+### Step 10: Display Summary
 
 Output a summary table:
 
@@ -164,7 +134,7 @@ Output a summary table:
 ### Next Steps
 
 1. **Open Warp layout:** Press `Cmd+Ctrl+L` and select "Laravel Worktree"
-2. **Start Vite:** Run `npm run dev` (or use the Warp layout)
+2. **Start services:** Run `bash scripts/run.sh` (or use the Warp layout)
 3. **Open in browser:** Run `browse` or visit the URL above
 
 ### Useful Commands
@@ -175,6 +145,7 @@ Output a summary table:
 | `opendb` | Open database in GUI |
 | `p` | Run tests |
 | `a` | php artisan shortcut |
+| `bash scripts/run.sh` | Start all dev services |
 
 **IMPORTANT:** All subsequent work must use the worktree directory:
 `.worktrees/$SANITIZED_BRANCH/`
@@ -184,5 +155,6 @@ Output a summary table:
 
 - If worktree already exists, offer to enter it instead of creating
 - If Valet link fails, suggest running `valet install`
-- If MySQL fails, check if MySQL is running
+- If database creation fails, check if the DB server is running
 - If branch already exists, offer to use existing branch
+- If `scripts/setup.sh` fails, show the error output and suggest checking `references/troubleshooting.md`

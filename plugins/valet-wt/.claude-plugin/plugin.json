@@ -1,0 +1,9 @@
+{
+  "name": "valet-wt",
+  "description": "Laravel workspace scripts and git worktrees with Valet, databases, and Warp config",
+  "version": "2.0.0",
+  "author": {
+    "name": "Mohammed Sohail"
+  },
+  "keywords": ["laravel", "valet", "worktree", "workspace", "scripts", "codex"]
+}

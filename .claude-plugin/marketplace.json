@@ -10,11 +10,11 @@
   },
   "plugins": [
     {
-      "name": "laravel-valet-worktree",
-      "source": "./plugins/laravel-valet-worktree",
-      "description": "Git worktrees with Laravel Valet, databases, and Warp terminal config",
-      "version": "1.0.0",
-      "keywords": ["laravel", "valet", "worktree", "git"]
+      "name": "valet-wt",
+      "source": "./plugins/valet-wt",
+      "description": "Laravel workspace scripts and git worktrees with Valet, databases, and Warp config",
+      "version": "2.0.0",
+      "keywords": ["laravel", "valet", "worktree", "workspace", "scripts", "codex"]
     },
     {
       "name": "forge-cli",

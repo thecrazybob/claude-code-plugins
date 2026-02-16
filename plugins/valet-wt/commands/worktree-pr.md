@@ -70,7 +70,7 @@ Generate a commit message based on the changes. If task number provided, prefix 
 git commit -m "$(cat <<'EOF'
 TASK-123: feat: description of changes
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 
@@ -78,7 +78,7 @@ EOF
 git commit -m "$(cat <<'EOF'
 feat: description of changes
 
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
 EOF
 )"
 ```

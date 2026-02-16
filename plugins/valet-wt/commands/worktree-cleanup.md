@@ -5,7 +5,7 @@ allowed-tools: Bash, AskUserQuestion
 
 # /worktree-cleanup Command
 
-Clean up a worktree and all associated resources (Valet domain, database, git branch).
+Clean up a worktree and all associated resources using `scripts/archive.sh` for service teardown, then git for worktree and branch removal.
 
 ## Pre-flight Checks
 
@@ -86,58 +86,43 @@ Clean up a worktree and all associated resources (Valet domain, database, git br
 
 Execute these in order:
 
-### Step 1: Kill Vite Processes
+### Step 1: Run archive.sh
 
+If `scripts/archive.sh` exists in the worktree, use it for service teardown (kills Vite, unlinks Valet, drops database):
+
+```bash
+cd $WORKTREE_PATH
+CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH bash scripts/archive.sh
+```
+
+If `scripts/archive.sh` doesn't exist, fall back to inline cleanup:
 ```bash
 pkill -f "node.*vite.*$SANITIZED_BRANCH" || true
-```
-
-### Step 2: Unlink from Valet
-
-```bash
 cd $WORKTREE_PATH 2>/dev/null && valet unlink || true
+DB_NAME=$(echo "${PROJECT}_${SANITIZED_BRANCH}" | tr '-' '_')
+mysql -u root -e "DROP DATABASE IF EXISTS $DB_NAME;" 2>/dev/null || true
 ```
 
-Or if we know the domain:
-```bash
-valet unlink $PROJECT-$SANITIZED_BRANCH || true
-```
-
-### Step 3: Change to Main Project Directory
+### Step 2: Change to Main Project Directory
 
 If currently in the worktree being deleted:
 ```bash
 cd ../..
 ```
 
-### Step 4: Remove Git Worktree
+### Step 3: Remove Git Worktree
 
 ```bash
 git worktree remove .worktrees/$SANITIZED_BRANCH --force
 ```
 
-### Step 5: Delete Local Branch
+### Step 4: Delete Local Branch
 
 ```bash
 git branch -D $BRANCH
 ```
 
 Note: This may fail if the branch was never created (worktree used existing branch). That's OK.
-
-### Step 6: Drop Database
-
-```bash
-DB_NAME=$(echo "${PROJECT}_${SANITIZED_BRANCH}" | tr '-' '_')
-mysql -u root -e "DROP DATABASE IF EXISTS $DB_NAME;"
-```
-
-### Step 7: Update Warp Configuration (Optional)
-
-If the Warp launch config was specifically for this worktree, it can be left as-is (will just fail to open that path) or removed:
-```bash
-# Optional: Remove if it was worktree-specific
-# rm ~/.warp/launch_configurations/laravel-worktree.yaml
-```
 
 ## Display Result
 
@@ -146,11 +131,11 @@ If the Warp launch config was specifically for this worktree, it can be left as-
 
 | Resource | Status |
 |----------|--------|
-| Vite processes | Killed |
+| Services | Stopped (via archive.sh) |
 | Valet domain | Unlinked ($PROJECT-$SANITIZED_BRANCH.test) |
+| Database | Dropped (${PROJECT}_${SANITIZED_BRANCH}) |
 | Worktree | Removed (.worktrees/$SANITIZED_BRANCH/) |
 | Git branch | Deleted ($BRANCH) |
-| Database | Dropped (${PROJECT}_${SANITIZED_BRANCH}) |
 
 You're now in the main project directory.
 ```
@@ -160,6 +145,7 @@ You're now in the main project directory.
 - If worktree removal fails due to uncommitted changes, warn user and offer options:
   1. Force remove anyway (lose changes)
   2. Cancel and commit/stash first
+- If archive.sh fails, fall back to inline cleanup steps
 - If database drop fails, the database may not exist (already cleaned up) - that's OK
 - If Valet unlink fails, the link may not exist - that's OK
 - If branch delete fails, branch may have been deleted already - that's OK
