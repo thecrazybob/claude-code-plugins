@@ -92,7 +92,7 @@ If `scripts/archive.sh` exists in the worktree, use it for service teardown (kil
 
 ```bash
 cd $WORKTREE_PATH
-CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH bash scripts/archive.sh
+WT_WORKSPACE_NAME=$SANITIZED_BRANCH bash scripts/archive.sh
 ```
 
 If `scripts/archive.sh` doesn't exist, fall back to inline cleanup:

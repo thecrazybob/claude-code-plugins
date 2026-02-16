@@ -19,7 +19,7 @@ This skill covers two related workflows:
 
 ## Part 1: Script Generation
 
-Generate setup, archive, and run scripts for Laravel applications. Scripts support MySQL, PostgreSQL, and SQLite databases, detect project services from composer.json and .env, and include Conductor/Codex worktree integration.
+Generate setup, archive, and run scripts for Laravel applications. Scripts support MySQL, PostgreSQL, and SQLite databases, detect project services from composer.json and .env, and include worktrunk (`wt`) and Codex worktree integration.
 
 ### What Gets Generated
 
@@ -28,6 +28,7 @@ Generate setup, archive, and run scripts for Laravel applications. Scripts suppo
 | `scripts/setup.sh` | Install deps, create DB, configure .env, migrate & seed |
 | `scripts/archive.sh` | Stop processes, unlink Valet, drop DB, clean up |
 | `scripts/run.sh` | Run detected dev services (horizon, queue, vite, etc.) via concurrently |
+| `.config/wt.toml` | Worktrunk hooks — wires setup.sh/archive.sh into `wt` lifecycle |
 | `.codex/environments/environment.toml` | Codex environment config embedding the setup script |
 
 ### Detection Workflow
@@ -64,9 +65,9 @@ This is more reliable than reading `.env.example` or `.env` because the actual r
 Follow this order exactly:
 
 1. **Tool checks** — Verify php, composer, npm, valet exist (DB CLI tools checked later based on driver)
-2. **Workspace name** — `CONDUCTOR_WORKSPACE_NAME` fallback to `basename $PWD`
+2. **Workspace name** — `WT_WORKSPACE_NAME` fallback to `basename $PWD`
 3. **Codex worktree key** — Extract from path if inside `~/.codex/worktrees/<id>/`
-4. **Root path** — `CONDUCTOR_ROOT_PATH` fallback to `$(dirname "$0")/..`
+4. **Root path** — `WT_ROOT_PATH` fallback to `$(dirname "$0")/..`
 5. **Install dependencies** — `composer install` with retry, `npm install`
 6. **Setup .env** — Copy from root path or `.env.example`, handle broken symlinks
 7. **Valet link** — `{project}-{worktree_key}.test`, HTTP only (no `valet secure`)
@@ -77,7 +78,7 @@ Follow this order exactly:
 12. **App key** — Generate if missing
 13. **Cache clear** — `php artisan optimize:clear`
 14. **Storage link** — `php artisan storage:link --force`
-15. **Vite port** — Configure from `CONDUCTOR_PORT` if available
+15. **Vite port** — Configure from `WT_PORT` if available
 16. **Migrate & seed** — `php artisan migrate --seed --force`
 17. **Summary output** — URL, database name/path, next steps
 
@@ -110,6 +111,48 @@ Common process mappings:
 - Logs → `php artisan pail --timeout=0`
 - Vite → `npm run dev`
 - Reverb → `php artisan reverb:start`
+
+### wt.toml Structure
+
+Generate `.config/wt.toml` so that worktrunk (`wt switch --create` / `wt remove`) automatically runs the lifecycle scripts. Adapt hooks based on detected services.
+
+```toml
+[post-start]
+setup = """
+echo "Pre-copying dependencies from main project..."
+cp -R {{ primary_worktree_path }}/vendor vendor 2>/dev/null && echo "vendor/ copied" || echo "No vendor/ to copy"
+cp -R {{ primary_worktree_path }}/node_modules node_modules 2>/dev/null && echo "node_modules/ copied" || echo "No node_modules/ to copy"
+WT_ROOT_PATH={{ primary_worktree_path }} bash scripts/setup.sh
+"""
+
+[pre-commit]
+pint = "vendor/bin/pint --dirty"
+# Include phpstan only if phpstan.neon or phpstan.neon.dist exists
+phpstan = "vendor/bin/phpstan analyse --memory-limit=512M"
+
+[pre-merge]
+test = "php artisan test --parallel --compact"
+
+[pre-remove]
+archive = "bash scripts/archive.sh"
+
+[list]
+url = "http://{project}-{{ branch | sanitize }}.test"
+```
+
+Key decisions:
+- **`post-start`** (background) instead of `post-create` (blocking) — worktree creation feels instant, setup runs in background
+- **`WT_ROOT_PATH`** must be set so setup.sh copies `.env` from the main project
+- **`WT_WORKSPACE_NAME`** is not needed — setup.sh defaults to `basename "$PWD"` which is the sanitized branch
+- **`pre-commit`** hooks run during `wt merge` before the squash commit — Pint formats dirty files, PHPStan runs static analysis
+- **`pre-merge`** runs the full test suite before merge to target branch
+- **`[list] url`** shows the Valet domain in `wt list` output
+- Include `phpstan` hook only if `phpstan.neon` or `phpstan.neon.dist` exists in the project
+- The `{project}` placeholder must be replaced with the actual detected project name
+
+### .gitignore Update
+
+Append `/.worktrees/` to the project's `.gitignore` if not already present. This prevents worktree directories from being committed.
 
 ### environment.toml Structure
 
@@ -286,12 +329,24 @@ git worktree add .worktrees/$SANITIZED_BRANCH -b $BRANCH $BASE_BRANCH
 cp -r scripts/ .worktrees/$SANITIZED_BRANCH/scripts/
 ```
 
+#### Step 6.5: Copy Dependencies
+
+Copy `vendor/` and `node_modules/` from the main project before running setup. Since the worktree shares the same `composer.lock` and `package-lock.json`, these directories are identical — turning `composer install` / `npm install` into fast verification steps instead of full installs.
+
+```bash
+echo "Pre-copying dependencies from main project..."
+cp -R vendor/ .worktrees/$SANITIZED_BRANCH/vendor/ 2>/dev/null && echo "vendor/ copied" || echo "No vendor/ to copy"
+cp -R node_modules/ .worktrees/$SANITIZED_BRANCH/node_modules/ 2>/dev/null && echo "node_modules/ copied" || echo "No node_modules/ to copy"
+```
+
+> **Why here and not in `setup.sh`?** `setup.sh` is also used by Codex/Conductor environments where there's no parent project to copy from. The worktree command always has a parent project available.
+
 #### Step 7: Run setup.sh
 
 ```bash
 cd .worktrees/$SANITIZED_BRANCH
-CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH \
-CONDUCTOR_ROOT_PATH=$(cd ../.. && pwd) \
+WT_WORKSPACE_NAME=$SANITIZED_BRANCH \
+WT_ROOT_PATH=$(cd ../.. && pwd) \
 bash scripts/setup.sh
 ```
 
@@ -368,7 +423,7 @@ options:
 4. After PR is merged, cleanup using `archive.sh` then git cleanup:
    ```bash
    cd .worktrees/$SANITIZED_BRANCH
-   CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH bash scripts/archive.sh
+   WT_WORKSPACE_NAME=$SANITIZED_BRANCH bash scripts/archive.sh
    cd ../..
    git worktree remove .worktrees/$SANITIZED_BRANCH --force
    git branch -D $BRANCH

@@ -79,14 +79,26 @@ git worktree add .worktrees/$SANITIZED_BRANCH -b $BRANCH $BASE_BRANCH
 cp -r scripts/ .worktrees/$SANITIZED_BRANCH/scripts/
 ```
 
+### Step 6.5: Copy Dependencies
+
+Copy `vendor/` and `node_modules/` from the main project before running setup. Since the worktree shares the same `composer.lock` and `package-lock.json`, these directories are identical — turning `composer install` / `npm install` into fast verification steps instead of full installs.
+
+```bash
+echo "Pre-copying dependencies from main project..."
+cp -R vendor/ .worktrees/$SANITIZED_BRANCH/vendor/ 2>/dev/null && echo "vendor/ copied" || echo "No vendor/ to copy"
+cp -R node_modules/ .worktrees/$SANITIZED_BRANCH/node_modules/ 2>/dev/null && echo "node_modules/ copied" || echo "No node_modules/ to copy"
+```
+
+> **Why here and not in `setup.sh`?** `setup.sh` is also used by Codex/Conductor environments where there's no parent project to copy from. The worktree command always has a parent project available.
+
 ### Step 7: Run setup.sh
 
 This single command replaces the old inline steps (Valet link, .env config, DB creation, dependencies, migrations, etc.):
 
 ```bash
 cd .worktrees/$SANITIZED_BRANCH
-CONDUCTOR_WORKSPACE_NAME=$SANITIZED_BRANCH \
-CONDUCTOR_ROOT_PATH=$(cd ../.. && pwd) \
+WT_WORKSPACE_NAME=$SANITIZED_BRANCH \
+WT_ROOT_PATH=$(cd ../.. && pwd) \
 bash scripts/setup.sh
 ```
 
