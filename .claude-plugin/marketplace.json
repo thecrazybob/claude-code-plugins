@@ -10,13 +10,6 @@
   },
   "plugins": [
     {
-      "name": "valet-wt",
-      "source": "./plugins/valet-wt",
-      "description": "Laravel workspace scripts and git worktrees with Valet, databases, and Warp config",
-      "version": "2.0.0",
-      "keywords": ["laravel", "valet", "worktree", "workspace", "scripts", "codex"]
-    },
-    {
       "name": "forge-cli",
       "source": "./plugins/forge-cli",
       "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
