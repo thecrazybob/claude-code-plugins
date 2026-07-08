@@ -1,359 +1,146 @@
 ---
-name: forge-cli
-description: Debug and manage Laravel applications in production via Laravel Forge CLI and direct SSH. Activates when the user mentions production logs, debug production, forge, check production, run on server, production database, deploy, SSH to production, server logs, remote artisan, production error, or tinker production.
-version: 1.2.0
+name: forge
+description: Debug and manage Laravel applications in production via Laravel Forge CLI v2 and direct SSH. Use whenever the user mentions production logs, debugging production, forge, deploying, checking production, running commands on a server, the production database, production env variables, queue or background-process health, server logs, remote artisan, production errors, or tinker in production — even if they don't say "Forge" explicitly.
 ---
 
-# Laravel Forge CLI
+# Laravel Forge CLI (v2)
 
-## Overview
+Manage Forge-provisioned servers from the command line: read logs, check service status, run remote commands, and manage environment files. This skill covers Forge CLI **v2** (the v1 API is discontinued 2026-07-31, which takes the v1 CLI with it).
 
-Laravel Forge CLI allows managing Forge-provisioned servers from the command line. Use it for debugging production issues, checking logs, and running safe read-only commands.
+Two companion references — read them when you need detail beyond this file:
+- [references/commands.md](references/commands.md) — every command's exact signature, required context, and non-interactive behavior
+- [references/gotchas.md](references/gotchas.md) — verified failure modes (numbered; referenced below as G1–G15)
 
-## Setup
+## Setup and context model
+
+v2 scopes everything to an **organization → server → site** chain. Commands fail with "You have not selected an organization" until context is set.
 
 ```bash
-# Install globally
+# Install/upgrade (requires PHP 8.2+)
 composer global require laravel/forge-cli
 
-# Authenticate (opens browser)
-forge login
+# Authenticate non-interactively (bare `forge login` prompts and can't be automated)
+forge login --token="<api-token>"        # or: export FORGE_API_TOKEN=<token>
 
-# List available servers/sites
+# Set context — required once per machine, persists in ~/.laravel-forge/config.json
+forge organization:list
+forge organization:switch <org-slug>     # WARNING: this clears the selected server (G3)
 forge server:list
+forge server:switch <server-name>
 forge site:list
 ```
 
-### PHP 8.4 Deprecation Warnings
+Selecting context is a local config write — safe to run freely. If a command unexpectedly complains about missing context, check `forge organization:current` and `forge server:current` first.
 
-Forge CLI triggers deprecation warnings with PHP 8.4. Create an alias to suppress them:
+## Rules for running Forge CLI non-interactively
+
+You are always running the CLI without a TTY, which changes its behavior in ways that matter:
+
+1. **Pass every positional argument explicitly** (`site`, `server`, `organization`, background-process id) and always pass `--command=` to `forge command`. Omitted arguments open interactive pickers that fail — or worse, silently proceed with a default.
+2. **Never trust the exit code alone.** Unanswerable prompts print an error panel but **exit 0** (G1). After each command, also check output for `unexpected error`, `Error Message:`, or `You have not selected`.
+3. **Confirmation prompts auto-answer YES.** All `*:restart` commands and env prompts execute immediately with no confirmation when run headlessly (G2). The CLI will not protect the user — so confirm with the user in conversation *before* issuing any destructive command (list below).
+4. **Output is human-formatted only** — no `--json`. Strip noise when parsing (G4):
+   ```bash
+   forge site:list --no-ansi 2>&1 | grep -v '^\[' | grep -iv 'outdated version'
+   ```
+5. `database:shell` cannot be automated at all (G5) — query via SSH + tinker instead.
+6. **The API rate-limits bursts hard** (`Too Many Requests`, also with exit 0 — G13). Space calls out, retry with ~20s backoff, and never run forge commands in parallel.
+
+## Safe read-only commands
+
+Run these freely, no confirmation needed:
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
-alias forge='php -d error_reporting="E_ALL & ~E_DEPRECATED" $(which forge)'
+forge site:logs <site>                    # Laravel application log (add --follow to tail)
+forge deploy:logs <site>                  # latest deployment output
+forge php:logs / nginx:logs / database:logs
+forge php:status / nginx:status / database:status
+forge background-process:list             # queue workers, Horizon, etc. (daemon:* aliases work)
+forge background-process:status <id>
+forge background-process:logs <id>
+forge server:list / site:list / organization:list
 ```
 
-## Safe Read-Only Commands
+## Running commands on the server: two paths
 
-These commands are safe to run without confirmation:
-
-### View Logs
+**`forge command` — for simple one-offs at the site root.** Reliable in v2 (the v1 "Event unresolvable" bug no longer occurs). Needs only the API token, no SSH key. Don't run two of these against the same site concurrently (G6).
 
 ```bash
-# Application logs (Laravel logs)
-forge site:logs <site>
-
-# Deployment logs
-forge deploy:logs <site>
-
-# PHP-FPM logs
-forge php:logs
-
-# Nginx logs
-forge nginx:logs
+forge command <site> --command="php artisan --version"
+forge command <site> --command="php artisan queue:failed"
 ```
 
-### Status Checks
+**Direct SSH — for anything complex.** Real exit codes, arbitrary paths, pipes, tails, parallelism. Get the IP from `forge server:list`.
 
 ```bash
-forge php:status
-forge nginx:status
-forge database:status
-forge server:list
-forge site:list
+# Detect deployment mode first (G11): zero-downtime sites keep code in /current
+ssh forge@<ip> "ls /home/forge/<site>/current >/dev/null 2>&1 && echo zero-downtime || echo standard"
+
+ssh forge@<ip> "cd /home/forge/<site> && php artisan route:list"          # standard
+ssh forge@<ip> "cd /home/forge/<site>/current && php artisan route:list" # zero-downtime
+ssh forge@<ip> "tail -200 /home/forge/<site>/storage/logs/laravel.log"
+
+# Tinker: --execute only, double-escape backslashes, echo the output (G12)
+ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo App\\\\Models\\\\User::count();'"
 ```
 
-### Site Information
+Prefer `forge command` when one artisan command answers the question; switch to SSH the moment you need pipes, non-site paths, `tail -f`, tinker, or parallel probes across servers.
+
+## Environment file workflow
+
+`env:push` replaces the site's production `.env` — treat the whole flow with care, and get user confirmation before pushing.
+
+Always work in the scratchpad directory (never a project root — a default-named pull can collide with local files) and always pass an explicit filename, which skips every prompt and avoids the `.env.forge.<id>` rename trap (G7):
 
 ```bash
-forge site:info <site>
-```
-
-## Direct SSH (Recommended for Complex Tasks)
-
-The `forge command` subcommand has a known bug ("Event unresolvable"). Use direct SSH instead:
-
-### Get Server IP
-
-```bash
-forge server:list
-# Note the IP address for your server
-```
-
-### Run Remote Commands
-
-> **Note:** If zero-downtime deployments are enabled, replace `/home/forge/<site>` with `/home/forge/<site>/current` in all commands below.
-
-```bash
-# Basic structure
-ssh forge@<server-ip> "cd /home/forge/<site> && <command>"
-
-# Examples:
-# Check PHP version
-ssh forge@<ip> "php -v"
-
-# Run artisan commands (read-only)
-ssh forge@<ip> "cd /home/forge/<site> && php artisan --version"
-ssh forge@<ip> "cd /home/forge/<site> && php artisan route:list"
-ssh forge@<ip> "cd /home/forge/<site> && php artisan config:show app"
-
-# Check queue status
-ssh forge@<ip> "cd /home/forge/<site> && php artisan queue:monitor"
-
-# View recent logs
-ssh forge@<ip> "tail -100 /home/forge/<site>/storage/logs/laravel.log"
-```
-
-### Tinker (Read-Only Queries)
-
-```bash
-# IMPORTANT: Use echo to see output, escape backslashes
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo App\\Models\\User::count();'"
-
-# Query examples
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo App\\Models\\User::where(\"email\", \"like\", \"%@example.com\")->count();'"
-
-# Get recent records
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='print_r(App\\Models\\User::latest()->first()->toArray());'"
-```
-
-## Destructive Operations (Require Confirmation)
-
-These commands are blocked by the safety hook and require explicit user confirmation:
-
-### Deployment
-
-```bash
-forge deploy <site>              # Triggers deployment
-forge deploy:reset <site>        # Resets deployment script
-```
-
-### Environment Changes
-
-**Always use `env:pull` and `env:push` for environment changes** - never edit `.env` directly via SSH with `sed` or `echo` (error-prone, no backup).
-
-> **CRITICAL: Do NOT rename or copy the `.env.forge.<id>` file!**
->
-> Forge CLI internally tracks the original `.env.forge.<site-id>` filename created by `env:pull`. Renaming it (e.g., `mv .env.forge.* .env`) or copying it (`cp .env.forge.* .env`) breaks this tracking and causes `env:push` to fail with:
-> `"The environment variables for that site have not been downloaded."`
->
-> **Edit the `.env.forge.<site-id>` file directly, then push.**
-
-> **CRITICAL: Always use the scratchpad directory for env:pull/env:push operations!**
->
-> The `forge env:pull` command creates files in the current working directory. If run from a project root, this can **overwrite the local `.env` file** and cause data loss.
->
-> **ALWAYS `cd` to the scratchpad directory first** before running `env:pull` or `env:push`.
-
-```bash
-# 1. FIRST: Change to the scratchpad directory (REQUIRED)
 cd <scratchpad-directory>
+forge env:pull <site> ./prod.env
+# edit ./prod.env with the Edit tool
+forge env:push <site> ./prod.env          # DESTRUCTIVE — confirm with user first
+rm -f ./prod.env
 
-# 2. Pull current .env to scratchpad
-#    Creates .env.forge.<site-id> in current working directory
-forge env:pull <site>
-# Output: Environment Variables Written To [.env.forge.3023104]
-
-# 3. Edit the .env.forge.<site-id> file DIRECTLY with your changes
-#    DO NOT rename or copy it — Forge tracks the original filename internally
-#    - Add new variables
-#    - Update existing values
-#    - Remove obsolete variables
-
-# 4. Push back to production (DESTRUCTIVE)
-#    Forge will prompt: "Would You Like Update The Site Environment File
-#    With The Contents Of The File [.env.forge.<id>] (yes/no)"
-#    Pipe "yes" to confirm non-interactively
-echo "yes" | forge env:push <site>
-
-# 5. Clean up scratchpad files
-rm -f .env.forge.*
-
-# 6. Clear config cache on the server
+# Config-cached or queue-worker sites won't see changes until:
 ssh forge@<ip> "cd /home/forge/<site> && php artisan config:clear"
 ```
 
-**Example workflow:**
+If you ever use the default filename (no file argument), never rename or copy the resulting `.env.forge.<site-id>` file — the site ID is re-derived from the filename and push breaks after a rename.
 
+## Destructive operations — confirm with the user first
+
+The plugin ships a PreToolUse hook that escalates these to an explicit user approval, but don't rely on it — ask in conversation before running:
+
+- `forge deploy <site>` — triggers a production deployment
+- `forge env:push` — replaces the production .env
+- `forge php:restart / nginx:restart / database:restart / background-process:restart` — service restarts (remember G2: these run unprompted headlessly)
+- `forge ssh:configure` — adds an SSH key to the server
+- Via SSH: `php artisan migrate`, `db:seed`, or raw SQL mutations (`DELETE`/`UPDATE`/`DROP`/`TRUNCATE`/`INSERT`/`ALTER`)
+
+## Common debugging workflows
+
+**Recent errors:**
 ```bash
-# ALWAYS start by changing to scratchpad
-cd <scratchpad-directory>
-
-# Pull example.com .env to scratchpad
-forge env:pull example.com
-# Output: Environment Variables Written To [.env.forge.3023104]
-
-# Edit the pulled file directly (DO NOT rename)
-# Use the Edit tool to add/modify variables in .env.forge.3023104
-
-# Push back (pipe "yes" for non-interactive confirmation)
-echo "yes" | forge env:push example.com
-
-# Clean up scratchpad
-rm -f .env.forge.*
-
-# Clear config cache on server
-ssh forge@<ip> "cd /home/forge/example.com && php artisan config:clear"
-```
-
-**Common mistake — DO NOT do this:**
-```bash
-# WRONG: Renaming breaks Forge's internal file tracking
-mv .env.forge.3023104 .env
-forge env:push example.com  # FAILS: "environment variables not downloaded"
-
-# WRONG: Copying also breaks it
-cp .env.forge.3023104 .env
-forge env:push example.com  # FAILS: same error
-```
-
-**Why use the scratchpad:**
-- **Prevents overwriting local project `.env`** - critical safety measure
-- Creates an isolated workspace for production env changes
-- Scratchpad is session-specific and auto-cleaned
-- Keeps production credentials out of project directories
-
-**Why this workflow is safer:**
-- Creates a local backup you can review before pushing
-- Avoids shell escaping issues with special characters
-- Prevents accidental concatenation or corruption
-- Easy to diff changes before pushing
-
-### Database Operations via SSH
-
-```bash
-# These are BLOCKED - require confirmation:
-ssh forge@<ip> "... php artisan migrate"
-ssh forge@<ip> "... php artisan db:seed"
-ssh forge@<ip> "mysql -e 'DELETE FROM ...'"
-ssh forge@<ip> "mysql -e 'UPDATE ...'"
-ssh forge@<ip> "mysql -e 'DROP ...'"
-ssh forge@<ip> "mysql -e 'TRUNCATE ...'"
-```
-
-## Deployment Script Location
-
-**The deploy script is NOT stored on the server.** It's managed via:
-- Forge web dashboard: Sites → [site] → Deployments → Deploy Script
-- Forge API
-
-When Forge deploys, it sends the script remotely and executes it. Deployment logs and provisioning scripts are stored in `/home/forge/.forge/`:
-
-```
-/home/forge/.forge/
-├── provision-*.sh          # Provisioning scripts (server setup)
-├── provision-*.output      # Provisioning output logs
-├── daemon-*.log            # Daemon/worker logs
-└── scheduled-*.log         # Scheduled task logs
-```
-
-## Deployment Modes
-
-Forge supports two deployment modes:
-
-### Standard Deployment (Default)
-
-Site deployed directly to `/home/forge/<site>/`:
-
-```
-/home/forge/<site>/
-├── app/
-├── public/
-├── storage/
-├── .env
-└── ...
-```
-
-Use `/home/forge/<site>` for commands.
-
-### Zero-Downtime Deployment (Optional)
-
-When enabled, Forge uses Envoyer-style releases:
-
-```
-/home/forge/<site>/
-├── current -> releases/20240115120000  # Symlink to active release
-├── releases/
-│   ├── 20240115120000/                 # Current release
-│   ├── 20240114100000/                 # Previous release
-│   └── ...
-├── storage/                            # Shared storage
-└── .env                               # Shared environment
-```
-
-Use `/home/forge/<site>/current` for commands.
-
-**How to detect which mode:** Check if a `current` symlink exists:
-```bash
-ssh forge@<ip> "ls -la /home/forge/<site>/current 2>/dev/null || echo 'Standard deployment (no /current symlink)'"
-```
-
-## Common Debugging Workflows
-
-### 1. Check Recent Errors
-
-```bash
-# Via Forge CLI
 forge site:logs <site>
-
-# Via SSH (more control)
 ssh forge@<ip> "tail -200 /home/forge/<site>/storage/logs/laravel.log | grep -A5 'ERROR\|Exception'"
 ```
 
-### 2. Check Queue Health
-
+**Queue/worker health:**
 ```bash
-# Horizon status
-ssh forge@<ip> "cd /home/forge/<site> && php artisan horizon:status"
-
-# Failed jobs count
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo DB::table(\"failed_jobs\")->count();'"
-
-# Recent failed jobs
-ssh forge@<ip> "cd /home/forge/<site> && php artisan queue:failed"
+forge background-process:list
+forge background-process:logs <id>
+forge command <site> --command="php artisan queue:failed"
+forge command <site> --command="php artisan horizon:status"
 ```
 
-### 3. Check Database State
-
+**Deployment check:**
 ```bash
-# Record counts
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo App\\Models\\User::count();'"
-
-# Check specific record
-ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='print_r(App\\Models\\User::find(1)?->toArray());'"
-```
-
-### 4. Check Deployment Status
-
-```bash
-# Recent deployment log
 forge deploy:logs <site>
-
-# Check site directory
-ssh forge@<ip> "ls -la /home/forge/<site>"
-
-# For zero-downtime: check current release symlink
-ssh forge@<ip> "readlink /home/forge/<site>/current"
+ssh forge@<ip> "readlink /home/forge/<site>/current"   # zero-downtime: active release
 ```
+If `deploy:logs` errors with `cat: .../provision-*.output: No such file`, that's a known per-site CLI bug (G14) — fall back to SSH evidence or the Forge dashboard.
 
-### 5. Check Server Resources
-
+**Server resources:**
 ```bash
-ssh forge@<ip> "df -h"           # Disk space
-ssh forge@<ip> "free -m"         # Memory
-ssh forge@<ip> "top -bn1 | head -20"  # CPU/processes
+ssh forge@<ip> "df -h; free -m; top -bn1 | head -20"
 ```
 
-## Known Issues & Gotchas
-
-1. **`forge command` is broken** - Use direct SSH instead
-2. **`forge logs` doesn't exist** - Use `forge site:logs`
-3. **Interactive commands don't work** - `forge ssh`, `forge tinker` can't be automated
-4. **Escape backslashes in tinker** - Use `App\\Models\\User` not `App\Models\User`
-5. **Use `echo` in tinker** - Output won't show without it
-6. **PHP 8.4 warnings** - Use the alias with error suppression
-7. **Wrong path** - Check deployment mode first; use `/current` symlink only for zero-downtime deployments
-8. **Never edit .env via SSH** - Don't use `sed`, `echo >>`, or direct edits on production `.env`. Use `forge env:pull` → edit locally → `forge env:push` instead (safer, creates backup, avoids shell escaping issues)
-9. **CRITICAL: env:pull/env:push in wrong directory** - ALWAYS `cd` to the scratchpad directory before running `forge env:pull` or `forge env:push`. Running from a project root will overwrite the local `.env` file!
-10. **CRITICAL: Never rename `.env.forge.*` files** - Forge CLI tracks the original `.env.forge.<site-id>` filename internally. Renaming it (e.g., `mv .env.forge.* .env`) breaks tracking and `env:push` will fail. Edit the `.env.forge.<site-id>` file directly.
-
+Deploy scripts are not stored on the server — they live in the Forge dashboard/API. Provisioning and daemon logs are under `/home/forge/.forge/` on the server.
