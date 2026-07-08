@@ -12,8 +12,7 @@
     {
       "name": "forge-cli",
       "source": "./plugins/forge-cli",
-      "description": "Debug and manage Laravel apps in production via Forge CLI and SSH",
-      "version": "1.0.0",
+      "description": "Debug and manage Laravel apps in production via Forge CLI v2 and SSH, with a hook that gates destructive commands",
       "keywords": ["laravel", "forge", "production", "ssh"]
     }
   ]
