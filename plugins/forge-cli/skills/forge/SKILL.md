@@ -1,15 +1,22 @@
 ---
 name: forge
-description: Debug and manage Laravel applications in production via Laravel Forge CLI v2 and direct SSH. Use whenever the user mentions production logs, debugging production, forge, deploying, checking production, running commands on a server, the production database, production env variables, queue or background-process health, server logs, remote artisan, production errors, or tinker in production — even if they don't say "Forge" explicitly.
+description: Manage Laravel Forge servers and sites with Forge CLI v2, the full Forge API, and SSH. Use for Forge deployments, logs, remote Artisan commands, environment files, databases, backups, domains, certificates, queues, and server resources. Includes the official OpenAPI schema for operations the CLI does not expose.
 ---
 
-# Laravel Forge CLI (v2)
+# Laravel Forge CLI and API (v2)
 
 Manage Forge-provisioned servers from the command line: read logs, check service status, run remote commands, and manage environment files. This skill covers Forge CLI **v2** (the v1 API is discontinued 2026-07-31, which takes the v1 CLI with it).
 
-Two companion references — read them when you need detail beyond this file:
-- [references/commands.md](references/commands.md) — every command's exact signature, required context, and non-interactive behavior
-- [references/gotchas.md](references/gotchas.md) — verified failure modes (numbered; referenced below as G1–G15)
+Read only the reference needed for the task:
+
+- [references/commands.md](references/commands.md) — all 34 public CLI commands, aliases, signatures, and headless behavior.
+- [references/cli-help.md](references/cli-help.md) — exact CLI usage, argument/option definitions, and hidden framework commands.
+- [references/api.md](references/api.md) — authentication, schema lookup, pagination, async completion, and refresh instructions.
+- [references/api-operations.md](references/api-operations.md) — every operation in the official API snapshot; use for features absent from the CLI.
+- [references/openapi.json](references/openapi.json) — full request/response schemas, parameters, enums, and permissions. Extract the relevant operation and referenced components; do not load the entire file by default.
+- [references/gotchas.md](references/gotchas.md) — version-specific failure modes (G1–G15).
+
+This is a standalone Agent Skill installable with `npx skills add thecrazybob/skills --skill forge`. Claude Code plugin packaging is optional; standalone installs do not include its PreToolUse hook. Use the CLI when it covers the task, the API for other supported operations, and SSH for server-side work. Never invent CLI subcommands from API operation names.
 
 ## Setup and context model
 
@@ -34,17 +41,17 @@ Selecting context is a local config write — safe to run freely. If a command u
 
 ## Rules for running Forge CLI non-interactively
 
-You are always running the CLI without a TTY, which changes its behavior in ways that matter:
+When running without a TTY, account for these CLI behaviors:
 
 1. **Pass every positional argument explicitly** (`site`, `server`, `organization`, background-process id) and always pass `--command=` to `forge command`. Omitted arguments open interactive pickers that fail — or worse, silently proceed with a default.
 2. **Never trust the exit code alone.** Unanswerable prompts print an error panel but **exit 0** (G1). After each command, also check output for `unexpected error`, `Error Message:`, or `You have not selected`.
-3. **Confirmation prompts auto-answer YES.** All `*:restart` commands and env prompts execute immediately with no confirmation when run headlessly (G2). The CLI will not protect the user — so confirm with the user in conversation *before* issuing any destructive command (list below).
-4. **Output is human-formatted only** — no `--json`. Strip noise when parsing (G4):
+3. **Confirmation prompts auto-answer YES.** All `*:restart` commands and env prompts execute immediately with no confirmation when run headlessly (G2). The CLI will not protect the user — so obtain authorization for the specific mutation before issuing it (list below). Existing explicit authorization in the conversation counts; do not ask again for the same action.
+4. **Resource output is human-formatted** — no resource `--json` flag. `forge list --format=json` does describe the CLI command definitions. Strip noise when parsing (G4):
    ```bash
    forge site:list --no-ansi 2>&1 | grep -v '^\[' | grep -iv 'outdated version'
    ```
 5. `database:shell` cannot be automated at all (G5) — query via SSH + tinker instead.
-6. **The API rate-limits bursts hard** (`Too Many Requests`, also with exit 0 — G13). Space calls out, retry with ~20s backoff, and never run forge commands in parallel.
+6. **The API rate-limits bursts hard** (`Too Many Requests`, also with exit 0 — G13). Space calls out and keep read retries bounded to three attempts, honoring rate-limit headers when using the API. Avoid parallel CLI calls that amplify the limit; do not automatically retry mutations.
 
 ## Safe read-only commands
 
@@ -54,7 +61,7 @@ Run these freely, no confirmation needed:
 forge site:logs <site>                    # Laravel application log (add --follow to tail)
 forge deploy:logs <site>                  # latest deployment output
 forge php:logs / nginx:logs / database:logs
-forge php:status / nginx:status / database:status
+forge php:status                         # or nginx:status, database:status
 forge background-process:list             # queue workers, Horizon, etc. (daemon:* aliases work)
 forge background-process:status <id>
 forge background-process:logs <id>
@@ -88,31 +95,33 @@ Prefer `forge command` when one artisan command answers the question; switch to 
 
 ## Environment file workflow
 
-`env:push` replaces the site's production `.env` — treat the whole flow with care, and get user confirmation before pushing.
+`env:push` replaces the site's production `.env` — treat the whole flow with care, and obtain authorization before pushing unless already explicitly granted.
 
-Always work in the scratchpad directory (never a project root — a default-named pull can collide with local files) and always pass an explicit filename, which skips every prompt and avoids the `.env.forge.<id>` rename trap (G7):
+Always work in the scratchpad directory (never a project root — a default-named pull can collide with local files) and always pass an explicit filename, which skips every prompt and makes the local file selection explicit (G7):
 
 ```bash
 cd <scratchpad-directory>
 forge env:pull <site> ./prod.env
-# edit ./prod.env with the Edit tool
-forge env:push <site> ./prod.env          # DESTRUCTIVE — confirm with user first
+# edit ./prod.env with the available file editor
+forge env:push <site> ./prod.env          # Production write — requires authorization
 rm -f ./prod.env
 
-# Config-cached or queue-worker sites won't see changes until:
-ssh forge@<ip> "cd /home/forge/<site> && php artisan config:clear"
+# For config-cached sites, use the authorized deployment/cache refresh workflow:
+ssh forge@<ip> "cd /home/forge/<site> && php artisan config:cache"
 ```
+Long-lived queue, Horizon, and Octane processes also need their normal authorized restart/reload workflow; refreshing the config cache alone does not reload them.
 
-If you ever use the default filename (no file argument), never rename or copy the resulting `.env.forge.<site-id>` file — the site ID is re-derived from the filename and push breaks after a rename.
+Without a file argument, the CLI uses `.env.forge.<site-id>` for the selected site. If that file is moved, pass its new path explicitly when pushing; the site comes from the site argument, not from parsing the filename.
 
-## Destructive operations — confirm with the user first
+## Production mutations — require authorization
 
-The plugin ships a PreToolUse hook that escalates these to an explicit user approval, but don't rely on it — ask in conversation before running:
+Before a mutation, verify its target and that the user authorized the action. Ask only if that authorization is missing. The optional Claude plugin hook may separately require tool approval; standalone installs have no hook. This applies equally to CLI commands, SSH, and API writes, including:
 
 - `forge deploy <site>` — triggers a production deployment
 - `forge env:push` — replaces the production .env
 - `forge php:restart / nginx:restart / database:restart / background-process:restart` — service restarts (remember G2: these run unprompted headlessly)
 - `forge ssh:configure` — adds an SSH key to the server
+- API resource creation, updates, deletion, deployment triggers, and service actions
 - Via SSH: `php artisan migrate`, `db:seed`, or raw SQL mutations (`DELETE`/`UPDATE`/`DROP`/`TRUNCATE`/`INSERT`/`ALTER`)
 
 ## Common debugging workflows

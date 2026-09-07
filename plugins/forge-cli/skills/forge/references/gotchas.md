@@ -18,7 +18,7 @@ Plain `abort()` failures (missing org context, invalid PHP version) do exit 1 co
 
 ## 2. Confirmation prompts silently auto-answer YES non-interactively
 
-`confirm()` prompts default to `true` when STDIN isn't a TTY — which is always the case when an agent runs the CLI. So `nginx:restart`, `php:restart`, `database:restart`, and the `env:pull`/`env:push` file prompts **execute immediately with no confirmation**. (`background-process:restart` is worse: it has no confirm prompt at all and restarts unconditionally in every mode.) The CLI provides zero headless protection for destructive commands. Confirmation must happen at the conversation level, before the command is issued.
+`confirm()` prompts default to `true` when STDIN isn't a TTY — as can be the case when an agent runs the CLI. So `nginx:restart`, `php:restart`, `database:restart`, and the `env:pull`/`env:push` file prompts **execute immediately with no confirmation**. (`background-process:restart` is worse: it has no confirm prompt at all and restarts unconditionally in every mode.) The CLI provides zero headless protection for destructive commands. Authorization must exist at the conversation level before the command is issued; explicit authorization already given for that action counts.
 
 ## 3. Organization context is not auto-selected
 
@@ -26,7 +26,7 @@ Only `forge login` auto-selects an organization (and only for single-org account
 
 ## 4. No machine-readable output
 
-There is no `--json` flag anywhere. Lists render as Unicode box tables (`┌─┬─┐`); parse by column position. `--no-ansi` strips colors but keeps box-drawing, **and spinner control sequences (`[?25l`, cursor moves) still leak into captured output**, plus an `==> You Are Using An Outdated Version...` banner may append. Filter noise:
+There is no resource `--json` flag. `forge list --format=json` exposes command definitions, not resource data. Lists render as Unicode box tables (`┌─┬─┐`); parse by column position. `--no-ansi` strips colors but keeps box-drawing, **and spinner control sequences (`[?25l`, cursor moves) still leak into captured output**, plus an `==> You Are Using An Outdated Version...` banner may append. Filter noise:
 
 ```bash
 forge server:list --no-ansi 2>&1 | grep -v '^\[' | grep -iv 'outdated version'
@@ -44,9 +44,9 @@ v2 resolves the created command's ID by listing commands and taking the newest. 
 
 ## 7. env file naming and prompts
 
-- With the `file` argument omitted, `env:pull`/`env:push` use `<cwd>/.env.forge.<site-id>` — **never rename or copy that file**; the site ID is re-derived from the name and push fails after a rename.
-- Passing an explicit file argument to both pull and push (`forge env:pull scoutjobs.ai ./prod.env` … `forge env:push scoutjobs.ai ./prod.env`) skips every prompt and sidesteps the naming trap entirely. Prefer this.
-- Sites with config caching or queue workers won't see pushed env changes until `php artisan config:clear` (via SSH) or a redeploy.
+- With the `file` argument omitted, `env:pull`/`env:push` use `<cwd>/.env.forge.<site-id>`. The site is selected independently; the CLI does not parse its ID from the filename. After moving the file, pass its new path explicitly. Verified in v2.0.2 `InteractsWithEnvironmentFiles::getEnvironmentFile` and `EnvPushCommand::handle`.
+- Passing an explicit file argument to both pull and push (`forge env:pull scoutjobs.ai ./prod.env` … `forge env:push scoutjobs.ai ./prod.env`) skips every prompt and selects the file explicitly. Prefer this.
+- Follow the site deployment workflow to refresh cached configuration and reload long-lived workers after an authorized env update. `config:clear` alone does not restart queue workers, Horizon, or Octane.
 
 ## 8. Version-check network call on every invocation
 
@@ -80,12 +80,7 @@ ssh forge@<ip> "cd /home/forge/<site> && php artisan tinker --execute='echo App\
 
 Firing several forge commands in quick succession reliably triggers `Too Many Requests` from the Forge API — observed after as few as 4-6 rapid calls. The failure exits 0 (verified live: `echo $?` after a real 429 prints `0`), so check for it explicitly and back off:
 
-```bash
-until forge background-process:logs 826788 --no-ansi > /tmp/out.txt 2>&1 \
-      && ! grep -qi "too many requests\|unexpected error" /tmp/out.txt; do
-  sleep 20
-done
-```
+For read-only calls, retry at most three times with a delay; then report the error. Honor API rate-limit headers when available. Do not retry writes after an uncertain result without inspecting state first.
 
 Space non-urgent calls out rather than batching them, and never run forge commands in parallel from multiple agents.
 

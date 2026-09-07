@@ -1,13 +1,20 @@
 {
   "name": "forge-cli",
   "displayName": "Laravel Forge CLI",
-  "description": "Debug and manage Laravel apps in production via Forge CLI v2 and SSH, with a hook that gates destructive commands",
-  "version": "2.0.0",
+  "description": "Manage Laravel Forge with CLI v2, the complete API schema, and SSH; also installable as a standalone Agent Skill",
+  "version": "2.1.0",
   "author": {
     "name": "Mohammed Sohail"
   },
-  "homepage": "https://github.com/thecrazybob/claude-code-plugins",
-  "repository": "https://github.com/thecrazybob/claude-code-plugins",
+  "homepage": "https://github.com/thecrazybob/skills",
+  "repository": "https://github.com/thecrazybob/skills",
   "license": "MIT",
-  "keywords": ["laravel", "forge", "production", "ssh", "debugging", "deployment"]
+  "keywords": [
+    "laravel",
+    "forge",
+    "production",
+    "ssh",
+    "debugging",
+    "deployment"
+  ]
 }

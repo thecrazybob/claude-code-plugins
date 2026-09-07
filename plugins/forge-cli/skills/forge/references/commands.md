@@ -1,6 +1,6 @@
 # Forge CLI v2 Command Reference
 
-Verified against forge-cli v2.0.2 source (`app/Commands/`) and `forge list`. Every command is listed with its exact signature, the context it needs, what happens when run non-interactively with arguments omitted, and whether it mutates anything.
+Verified 2026-09-07 against [forge-cli v2.0.2 source](https://github.com/laravel/forge-cli/tree/v2.0.2/app/Commands) and the installed command definitions: **34 public Forge commands**. [cli-help.md](cli-help.md) contains exact usage, every argument/option, and hidden framework commands. Every command is listed with its exact signature, the context it needs, what happens when run non-interactively with arguments omitted, and whether it mutates anything.
 
 Global options on every command: `-h/--help`, `-q/--quiet`, `--silent`, `-n/--no-interaction`, `--ansi/--no-ansi`, `-v/-vv/-vvv`, `-V/--version`, `--env[=ENV]`.
 
@@ -15,13 +15,13 @@ Global options on every command: `-h/--help`, `-q/--quiet`, `--silent`, `-n/--no
 
 ## Context: organization → server
 
-All other commands require an active organization; most require an active server. Context lives in `~/.laravel-forge/config.json`.
+Remote-resource commands require an active organization; most require an active server. Local authentication/context display and framework help commands are exceptions. Context lives in `~/.laravel-forge/config.json`.
 
 | Command | Signature | Aliases | Mutates |
 |---------|-----------|---------|---------|
 | `organization:list` | `forge organization:list` | `org:list` | No |
 | `organization:current` | `forge organization:current` | `org:current` | No |
-| `organization:switch` | `forge organization:switch <slug-or-name>` | `org:switch` | Local config only — **also clears the selected server** |
+| `organization:switch` | `forge organization:switch <org-slug>` | `org:switch` | Local config only — **also clears the selected server** |
 | `server:list` | `forge server:list` | | No |
 | `server:current` | `forge server:current` | `current` | No |
 | `server:switch` | `forge server:switch <name-or-id>` | `switch` | Local config only |
@@ -31,7 +31,7 @@ All other commands require an active organization; most require an active server
 | Command | Signature | Non-interactive behavior | Mutates |
 |---------|-----------|--------------------------|---------|
 | `site:list` | `forge site:list` | — | No |
-| `site:logs` | `forge site:logs <site> [--follow]` | Site picker fails if `<site>` omitted | No |
+| `site:logs` | `forge site:logs <site> [--follow / -f]` | Site picker fails if `<site>` omitted | No |
 | `deploy:logs` | `forge deploy:logs <site>` | Same | No |
 | `deploy` | `forge deploy <site>` | Same | **Yes — triggers a deployment** |
 | `open` | `forge open <site>` | Opens forge.laravel.com in browser | No |
@@ -78,7 +78,7 @@ All other commands require an active organization; most require an active server
 |---------|-----------|---------|
 | `background-process:list` | `forge background-process:list` | No |
 | `background-process:status` | `forge background-process:status <id>` | No |
-| `background-process:logs` | `forge background-process:logs <id> [--follow]` | No |
+| `background-process:logs` | `forge background-process:logs <id> [--follow / -f]` | No |
 | `background-process:restart` | `forge background-process:restart <id>` | **Yes** |
 
 ## SSH key management
@@ -86,10 +86,10 @@ All other commands require an active organization; most require an active server
 | Command | Signature | Mutates |
 |---------|-----------|---------|
 | `ssh:configure` | `forge ssh:configure <server> --key=<path> --name=<name> [--user=forge]` | Yes — adds a key to the server |
-| `ssh:test` | `forge ssh:test <server> [--key=]` | No |
+| `ssh:test` | `forge ssh:test <server> [--key=]` | No (may switch local server context) |
 
 **`ssh:configure` danger:** if `--key` is omitted, the key-selection prompt defaults to its first option non-interactively — which is **"Create new key"** — so the command silently generates a brand-new local SSH keypair and uploads it to the production server. Always pass `--key`. (`--name` and `--user` have safe defaults: current OS username and `forge`.)
 
 ## Commands that do NOT exist (do not invent these)
 
-`forge logs`, `forge site:info`, `forge server:info`, `forge server:reboot`, `forge deploy:reset`, `forge database:list` — none of these exist in v1 or v2. Use `site:list`/`server:list` tables, `site:logs`, and the Forge dashboard for anything else.
+`forge logs`, `forge site:info`, `forge server:info`, `forge server:reboot`, `forge deploy:reset`, `forge database:list` — none of these exist in v1 or v2. Use `site:list`/`server:list` tables, `site:logs`, or look up the corresponding operation in [api-operations.md](api-operations.md). Follow [api.md](api.md) to construct API requests; do not invent a CLI equivalent.

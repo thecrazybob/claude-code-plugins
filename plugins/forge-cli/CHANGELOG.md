@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 — 2026-09-07
+
+- Added the official Forge API OpenAPI snapshot and generated index of all 279 operations across 160 paths, with schema lookup, permissions, pagination, and async handling guidance.
+- Verified all 34 public CLI commands against v2.0.2; added complete CLI help including aliases, options, and framework commands.
+- Documented standalone installation through `npx skills add thecrazybob/skills --skill forge`, including Codex and Claude Code.
+- Updated repository links after renaming to `thecrazybob/skills`; retained the existing Claude plugin and marketplace names.
+- Corrected env-file selection and worker reload guidance; bounded retries and clarified standalone installs do not include plugin hooks.
+
 ## 2.0.0 — 2026-07-08
 
 Rewritten for Laravel Forge CLI v2 (the v1 Forge API is discontinued 2026-07-31, which breaks CLI v1.x).

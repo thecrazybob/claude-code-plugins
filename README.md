@@ -1,68 +1,60 @@
-# Claude Code Plugins
+# Skills
 
-Laravel development plugins for [Claude Code](https://claude.ai/code).
+[![skills.sh](https://skills.sh/b/thecrazybob/skills)](https://skills.sh/thecrazybob/skills)
 
-## Available Plugins
+Agent skills for Laravel development, usable with Codex, Claude Code, and other agents supported by [skills.sh](https://skills.sh). Optional Claude Code plugin packaging is included.
 
-### forge-cli
+## Forge
 
-Debug and manage Laravel apps in production via Forge CLI **v2** and SSH. (Forge's v1 API — and with it CLI 1.x — is discontinued on 2026-07-31; this plugin targets `laravel/forge-cli` ^2.0.)
+[Forge skill](plugins/forge-cli/skills/forge/SKILL.md): manage Laravel Forge with all **34 public CLI v2 commands**, the official OpenAPI schema covering **279 API operations across 160 paths**, and SSH workflows. The schema was retrieved on 2026-09-07; CLI references target v2.0.2.
 
-**Features:**
-- v2 organization → server → site context model (`organization:switch`, `server:switch`)
-- View production logs (application, deployment, PHP, Nginx, database, background processes)
-- Run safe read-only commands on production, via `forge command` or direct SSH
-- Check queue worker / Horizon / background-process health
-- Debug production issues with Tinker over SSH
-- Manage environment variables safely (explicit-filename `env:pull`/`env:push` workflow)
-- PreToolUse guard hook that escalates destructive commands (deploy, env:push, restarts, remote migrations/SQL writes) to explicit user approval — Forge CLI v2 silently auto-confirms its own prompts when run non-interactively
-- Reference docs for all 32 v2 commands and 15 source-verified gotchas
+- [CLI commands](plugins/forge-cli/skills/forge/references/commands.md) and [exact help, options, aliases, and framework commands](plugins/forge-cli/skills/forge/references/cli-help.md).
+- [API usage and schema lookup](plugins/forge-cli/skills/forge/references/api.md), [complete operation index](plugins/forge-cli/skills/forge/references/api-operations.md), and [OpenAPI schema](plugins/forge-cli/skills/forge/references/openapi.json).
+- Production logs, deployments, environment files, background processes, databases, backups, domains, certificates, and other API resources.
 
-**Activates when mentioning:**
-- "production logs", "debug production", "forge"
-- "check production", "run on server", "production database"
-- "deploy", "SSH to production", "server logs", "queue health"
-
-## Installation
-
-### Add Marketplace
+## Install with npx
 
 ```bash
-/plugin marketplace add thecrazybob/claude-code-plugins
+# Install globally for both Codex and Claude Code:
+npx skills add thecrazybob/skills --skill forge -g -a codex claude-code -y
+
+# Or let the installer choose agents and scope interactively:
+npx skills add thecrazybob/skills --skill forge
+
+# Discover without installing:
+npx skills add thecrazybob/skills --list
 ```
 
-### Install Plugins
+The skill name is `forge`; the optional Claude plugin is named `forge-cli`. No Claude plugin or separate npm package is required. The skills CLI discovers the existing `plugins/forge-cli/skills/forge` directory and installs its references and scripts with the skill.
 
-```bash
-# Install forge-cli
+[skills.sh listing](https://skills.sh/thecrazybob/skills/forge). Skills.sh indexes public skills automatically through `npx skills add` installation telemetry; there is no separate publish command. See the [skills.sh FAQ](https://skills.sh/docs/faq).
+
+## Optional Claude Code plugin
+
+In Claude Code:
+
+```text
+/plugin marketplace add thecrazybob/skills
 /plugin install forge-cli@thecrazybob-plugins
 ```
 
-### Or Install Locally (Development)
-
-```bash
-# Clone the repository
-git clone git@github.com:thecrazybob/claude-code-plugins.git
-
-# Add local marketplace
-/plugin marketplace add ./claude-code-plugins
-
-# Install from local
-/plugin install forge-cli@thecrazybob-plugins
-```
+The existing marketplace name `thecrazybob-plugins` and plugin name `forge-cli` remain stable. Plugin installs include a PreToolUse hook for selected production mutations. Standalone `npx skills` installs include the skill only, not this hook. The hook is not a security boundary and does not cover arbitrary API requests; the skill requires authorization for production mutations in either installation mode.
 
 ## Requirements
 
-### forge-cli
+- PHP 8.2+ and Forge CLI v2 for CLI workflows: `composer global require laravel/forge-cli`.
+- An authorized Forge API token; select an organization and server for CLI operations.
+- SSH access for commands that operate over SSH.
+- `curl` and `jq` for the documented API examples; Python 3 only for regenerating/checking the API index.
 
-- PHP 8.2+ and [Laravel Forge CLI](https://forge.laravel.com/docs/cli) v2 installed (`composer global require laravel/forge-cli`)
-- Forge CLI authenticated (`forge login --token=...`) with an organization and server selected (`forge organization:switch`, `forge server:switch`)
-- SSH access to your Forge servers (optional but recommended for complex debugging)
+## Validate and refresh
+
+See [the API reference](plugins/forge-cli/skills/forge/references/api.md#refresh-and-check-the-snapshot) for schema refresh instructions. Verify the bundled schema's references, operation coverage, and checksum:
+
+```bash
+python3 plugins/forge-cli/skills/forge/scripts/api-reference.py --check
+```
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Author
-
-[Mohammed Sohail](https://github.com/thecrazybob)
+[MIT](LICENSE). By [Mohammed Sohail](https://github.com/thecrazybob).
